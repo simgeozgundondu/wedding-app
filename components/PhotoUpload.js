@@ -2,26 +2,37 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import PhotoViewer from "./PhotoViewer";
+import { wedding } from "@/lib/wedding-data";
 
 export default function PhotoUpload() {
   const fileInputId = useId();
   const fileInputRef = useRef(null);
   const closeButtonRef = useRef(null);
   const itemsRef = useRef([]);
+  const albumRef = useRef([]);
   const [isOpen, setIsOpen] = useState(false);
   const [guestName, setGuestName] = useState("");
   const [message, setMessage] = useState("");
   const [items, setItems] = useState([]);
   const [album, setAlbum] = useState([]);
   const [status, setStatus] = useState("idle");
+  const [viewerPhoto, setViewerPhoto] = useState(null);
 
   const isUploading = status === "uploading";
   const isSuccess = status === "success";
+  const photos = album;
   itemsRef.current = items;
+  albumRef.current = album;
 
   useEffect(() => {
     return () => {
       itemsRef.current.forEach((item) => URL.revokeObjectURL(item.preview));
+      albumRef.current.forEach((photo) => {
+        if (photo.src?.startsWith("blob:")) {
+          URL.revokeObjectURL(photo.src);
+        }
+      });
     };
   }, []);
 
@@ -65,7 +76,14 @@ export default function PhotoUpload() {
   function closeSheet() {
     if (isUploading) return;
     setIsOpen(false);
-    resetForm();
+    items.forEach((item) => {
+      const kept = album.some((photo) => photo.src === item.preview);
+      if (!kept) URL.revokeObjectURL(item.preview);
+    });
+    setItems([]);
+    setGuestName("");
+    setMessage("");
+    setStatus("idle");
   }
 
   function handleFiles(fileList) {
@@ -104,19 +122,17 @@ export default function PhotoUpload() {
     setStatus("uploading");
 
     window.setTimeout(() => {
-      setAlbum((current) => [
-        ...current,
-        {
-          id: `memory-${Date.now()}`,
-          guestName: guestName.trim(),
-          message: message.trim(),
-          files: items.map((item) => ({
-            name: item.file.name,
-            kind: item.kind,
-            size: item.file.size,
-          })),
-        },
-      ]);
+      const saved = items.map((item) => ({
+        id: item.id,
+        src: item.preview,
+        kind: item.kind,
+        file: item.file,
+        alt: guestName.trim() || "Düğün anısı",
+      }));
+      setAlbum((current) => [...current, ...saved]);
+      setItems([]);
+      setGuestName("");
+      setMessage("");
       setStatus("success");
     }, 800);
   }
@@ -156,7 +172,42 @@ export default function PhotoUpload() {
             Anınız albüme eklendi.
           </p>
         )}
+
+        {photos.length > 0 && (
+          <ul className="mt-16 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {photos.map((photo) => (
+              <li key={photo.id}>
+                <button
+                  type="button"
+                  onClick={() => setViewerPhoto(photo)}
+                  className="relative block aspect-[3/4] w-full overflow-hidden border border-line/80 bg-ivory-deep"
+                >
+                  {photo.kind === "video" ? (
+                    <video
+                      src={photo.src}
+                      muted
+                      playsInline
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <img
+                      src={photo.src}
+                      alt={photo.alt || "Düğün anısı"}
+                      className="h-full w-full object-cover"
+                    />
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
+
+      <PhotoViewer
+        photo={viewerPhoto}
+        onClose={() => setViewerPhoto(null)}
+        shareTitle={`${wedding.bride} & ${wedding.groom}`}
+      />
 
       <AnimatePresence>
         {isOpen && (
